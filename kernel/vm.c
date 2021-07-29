@@ -15,6 +15,24 @@ extern char etext[];  // kernel.ld sets this to end of kernel code.
 
 extern char trampoline[]; // trampoline.S
 
+static void vmprint_recusive(pagetable_t pgtbl, int depth) {
+  for (int i = 0; i != 512; i++) {
+    pte_t *pte = &pgtbl[i];
+    if (!(*pte & PTE_V)) 
+      continue;
+    for (int j = 0; j != depth; ++j)
+      printf(".. ");
+    printf("..%d: pte %p pa %p\n", i, *pte, PTE2PA(*pte));
+    if (depth != 2)
+      vmprint_recusive((pagetable_t)PTE2PA(*pte), depth+1);
+  }
+}
+
+void vmprint(pagetable_t pgtbl) {
+  printf("page table %p\n", pgtbl);
+  vmprint_recusive(pgtbl, 0);
+}
+
 /*
  * create a direct-map page table for the kernel.
  */
