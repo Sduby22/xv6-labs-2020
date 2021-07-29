@@ -5,6 +5,8 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
+#include "spinlock.h"
+#include "proc.h"
 
 /*
  * the kernel's page table.
@@ -31,6 +33,37 @@ static void vmprint_recusive(pagetable_t pgtbl, int depth) {
 void vmprint(pagetable_t pgtbl) {
   printf("page table %p\n", pgtbl);
   vmprint_recusive(pgtbl, 0);
+}
+
+pagetable_t
+kvminit_user()
+{
+  pagetable_t pgtbl = (pagetable_t) kalloc();
+  memset(pgtbl, 0, PGSIZE);
+
+  // uart registers
+  kvmmap_user(pgtbl, UART0, UART0, PGSIZE, PTE_R | PTE_W);
+
+  // virtio mmio disk interface
+  kvmmap_user(pgtbl, VIRTIO0, VIRTIO0, PGSIZE, PTE_R | PTE_W);
+
+  // CLINT
+  kvmmap_user(pgtbl, CLINT, CLINT, 0x10000, PTE_R | PTE_W);
+
+  // PLIC
+  kvmmap_user(pgtbl, PLIC, PLIC, 0x400000, PTE_R | PTE_W);
+
+  // map kernel text executable and read-only.
+  kvmmap_user(pgtbl, KERNBASE, KERNBASE, (uint64)etext-KERNBASE, PTE_R | PTE_X);
+
+  // map kernel data and the physical RAM we'll make use of.
+  kvmmap_user(pgtbl, (uint64)etext, (uint64)etext, PHYSTOP-(uint64)etext, PTE_R | PTE_W);
+
+  // map the trampoline for trap entry/exit to
+  // the highest virtual address in the kernel.
+  kvmmap_user(pgtbl, TRAMPOLINE, (uint64)trampoline, PGSIZE, PTE_R | PTE_X);
+
+  return pgtbl;
 }
 
 /*
@@ -129,6 +162,27 @@ walkaddr(pagetable_t pagetable, uint64 va)
   return pa;
 }
 
+// Look up a virtual address, return the physical address,
+// or 0 if not mapped.
+// Can only be used to look up user pages.
+uint64
+walkaddr_kernel(pagetable_t pagetable, uint64 va)
+{
+  pte_t *pte;
+  uint64 pa;
+
+  if(va >= MAXVA)
+    return 0;
+
+  pte = walk(pagetable, va, 0);
+  if(pte == 0)
+    return 0;
+  if((*pte & PTE_V) == 0)
+    return 0;
+  pa = PTE2PA(*pte);
+  return pa;
+}
+
 // add a mapping to the kernel page table.
 // only used when booting.
 // does not flush TLB or enable paging.
@@ -137,6 +191,19 @@ kvmmap(uint64 va, uint64 pa, uint64 sz, int perm)
 {
   if(mappages(kernel_pagetable, va, sz, pa, perm) != 0)
     panic("kvmmap");
+}
+
+void
+kvmmap_user(pagetable_t pagetable, uint64 va, uint64 pa, uint64 sz, int perm)
+{
+  if(mappages(pagetable, va, sz, pa, perm) != 0)
+    panic("kvmmap");
+}
+
+void
+kvmunmap_user(pagetable_t pagetable, uint64 va, uint64 sz)
+{
+  uvmunmap(pagetable, va, PGROUNDUP(sz)/PGSIZE, 0);
 }
 
 // translate a kernel virtual address to
@@ -150,7 +217,7 @@ kvmpa(uint64 va)
   pte_t *pte;
   uint64 pa;
   
-  pte = walk(kernel_pagetable, va, 0);
+  pte = walk(myproc()->kernel_pagetable, va, 0);
   if(pte == 0)
     panic("kvmpa");
   if((*pte & PTE_V) == 0)
@@ -314,6 +381,19 @@ uvmfree(pagetable_t pagetable, uint64 sz)
 {
   if(sz > 0)
     uvmunmap(pagetable, 0, PGROUNDUP(sz)/PGSIZE, 1);
+  freewalk(pagetable);
+}
+
+void
+uvmfree_kernel(pagetable_t pagetable)
+{
+  kvmunmap_user(pagetable, UART0, PGSIZE);
+  kvmunmap_user(pagetable, VIRTIO0, PGSIZE);
+  kvmunmap_user(pagetable, CLINT, 0x10000);
+  kvmunmap_user(pagetable, PLIC, 0x400000);
+  kvmunmap_user(pagetable, KERNBASE, (uint64)etext-KERNBASE);
+  kvmunmap_user(pagetable, (uint64)etext, PHYSTOP-(uint64)etext);
+  kvmunmap_user(pagetable, TRAMPOLINE, PGSIZE);
   freewalk(pagetable);
 }
 
