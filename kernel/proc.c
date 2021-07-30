@@ -162,7 +162,7 @@ freeproc(struct proc *p)
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
   if(p->kernel_pagetable) {
-    proc_freekernelpagetable(p->kernel_pagetable);
+    proc_freekernelpagetable(p->kernel_pagetable, p->sz);
   }
   p->pagetable = 0;
   p->sz = 0;
@@ -219,9 +219,9 @@ proc_freepagetable(pagetable_t pagetable, uint64 sz)
 }
 
 void
-proc_freekernelpagetable(pagetable_t pagetable)
+proc_freekernelpagetable(pagetable_t pagetable, uint64 sz)
 {
-  uvmfree_kernel(pagetable);
+  uvmfree_kernel(pagetable, sz);
 }
 
 // a user program that calls exec("/init")
@@ -247,7 +247,8 @@ userinit(void)
   
   // allocate one user page and copy init's instructions
   // and data into it.
-  uvminit(p->pagetable, initcode, sizeof(initcode));
+  uvminit_kernel(p->pagetable, p->kernel_pagetable
+                  , initcode, sizeof(initcode));
   p->sz = PGSIZE;
 
   // prepare for the very first "return" from kernel to user.
@@ -272,11 +273,11 @@ growproc(int n)
 
   sz = p->sz;
   if(n > 0){
-    if((sz = uvmalloc(p->pagetable, sz, sz + n)) == 0) {
+    if((sz = uvmalloc_kernel(p->pagetable, p->kernel_pagetable, sz, sz + n)) == 0) {
       return -1;
     }
   } else if(n < 0){
-    sz = uvmdealloc(p->pagetable, sz, sz + n);
+    sz = uvmdealloc_kernel(p->pagetable, p->kernel_pagetable, sz, sz + n);
   }
   p->sz = sz;
   return 0;
@@ -297,7 +298,7 @@ fork(void)
   }
 
   // Copy user memory from parent to child.
-  if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0){
+  if(uvmcopy_kernel(p->pagetable, np->pagetable, np->kernel_pagetable, p->sz) < 0){
     freeproc(np);
     release(&np->lock);
     return -1;

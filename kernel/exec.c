@@ -18,7 +18,7 @@ exec(char *path, char **argv)
   struct elfhdr elf;
   struct inode *ip;
   struct proghdr ph;
-  pagetable_t pagetable = 0, oldpagetable;
+  pagetable_t kpgtbl = 0, pagetable = 0, oldpagetable;
   struct proc *p = myproc();
 
   begin_op();
@@ -38,6 +38,14 @@ exec(char *path, char **argv)
   if((pagetable = proc_pagetable(p)) == 0)
     goto bad;
 
+  kpgtbl = kvminit_user();
+  if(kpgtbl == 0)
+    goto bad;
+
+  uint64 va = p->kstack;
+  uint64 pa = walkaddr_kernel(p->kernel_pagetable, va);
+  kvmmap_user(kpgtbl, va, pa, PGSIZE, PTE_R | PTE_W);
+
   // Load program into memory.
   for(i=0, off=elf.phoff; i<elf.phnum; i++, off+=sizeof(ph)){
     if(readi(ip, 0, (uint64)&ph, off, sizeof(ph)) != sizeof(ph))
@@ -49,7 +57,8 @@ exec(char *path, char **argv)
     if(ph.vaddr + ph.memsz < ph.vaddr)
       goto bad;
     uint64 sz1;
-    if((sz1 = uvmalloc(pagetable, sz, ph.vaddr + ph.memsz)) == 0)
+    if((sz1 = uvmalloc_kernel(pagetable, kpgtbl, 
+                              sz, ph.vaddr + ph.memsz)) == 0)
       goto bad;
     sz = sz1;
     if(ph.vaddr % PGSIZE != 0)
@@ -68,10 +77,11 @@ exec(char *path, char **argv)
   // Use the second as the user stack.
   sz = PGROUNDUP(sz);
   uint64 sz1;
-  if((sz1 = uvmalloc(pagetable, sz, sz + 2*PGSIZE)) == 0)
+  if((sz1 = uvmalloc_kernel(pagetable, kpgtbl,
+                            sz, sz + 2*PGSIZE)) == 0)
     goto bad;
   sz = sz1;
-  uvmclear(pagetable, sz-2*PGSIZE);
+  uvmclear_kernel(pagetable, kpgtbl, sz-2*PGSIZE);
   sp = sz;
   stackbase = sp - PGSIZE;
 
@@ -110,11 +120,17 @@ exec(char *path, char **argv)
     
   // Commit to the user image.
   oldpagetable = p->pagetable;
+  pagetable_t oldkpg = p->kernel_pagetable;
+  p->kernel_pagetable = kpgtbl;
   p->pagetable = pagetable;
   p->sz = sz;
   p->trapframe->epc = elf.entry;  // initial program counter = main
   p->trapframe->sp = sp; // initial stack pointer
   proc_freepagetable(oldpagetable, oldsz);
+  w_satp(MAKE_SATP(kpgtbl));
+  sfence_vma();
+  kvmunmap_user(oldkpg, p->kstack, PGSIZE);
+  proc_freekernelpagetable(oldkpg, oldsz);
   
   if(p->pid == 1)
     vmprint(p->pagetable);
@@ -124,6 +140,10 @@ exec(char *path, char **argv)
  bad:
   if(pagetable)
     proc_freepagetable(pagetable, sz);
+  if(kpgtbl) {
+    kvmunmap_user(kpgtbl, p->kstack, PGSIZE);
+    proc_freekernelpagetable(kpgtbl, sz);
+  }
   if(ip){
     iunlockput(ip);
     end_op();
