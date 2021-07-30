@@ -127,7 +127,8 @@ found:
   char *pa = kalloc();
   if(pa == 0)
     panic("kalloc");
-  uint64 va = KSTACK((int) (p - proc));
+  /*uint64 va = KSTACK((int) (p - proc));*/
+  uint64 va = KSTACK(0);
   kvmmap_user(p->kernel_pagetable, va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
   p->kstack = va;
 
@@ -154,15 +155,6 @@ freeproc(struct proc *p)
     uint64 pa = walkaddr_kernel(p->kernel_pagetable, p->kstack);
     if (pa == 0)
       panic("pa == 0");
-
-    // 第一个*pa是物理地址, 由于kernel_pagetable的identity mapping
-    // 应该可以直接访问
-    // 第二个*(p->kstack)我觉得是virtual address, 由于我们已经将
-    // p->kernel_pagetable写入satp, 而p->kernel_pagetable中已经
-    // 有p->kstack (va) -> pa (pa) 的mapping, 然后对va的访问应该可以由
-    // 硬件实现, 所以我觉得这下面两个解引用的值是不是应该相等
-    printf("%p and %p", *(uint64*)pa, *(uint64*)(p->kstack));
-    // 然而现实是如果直接对p->kstack解引用, 会出现page fault.
 
     kfree((void*)pa);
     kvmunmap_user(p->kernel_pagetable, p->kstack, PGSIZE);
