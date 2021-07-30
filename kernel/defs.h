@@ -60,6 +60,7 @@ void            ramdiskintr(void);
 void            ramdiskrw(struct buf*);
 
 // kalloc.c
+uint64 kfreemem(void);
 void*           kalloc(void);
 void            kfree(void *);
 void            kinit(void);
@@ -82,6 +83,7 @@ void            panic(char*) __attribute__((noreturn));
 void            printfinit(void);
 
 // proc.c
+int procnum(void);
 int             cpuid(void);
 void            exit(int);
 int             fork(void);
