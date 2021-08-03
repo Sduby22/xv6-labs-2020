@@ -142,7 +142,7 @@ NCHILD	user/usertests.c	/^  enum { N=12, NCHILD=4, SZ=500 };$/;"	e	enum:fourfile
 NCPU	kernel/param.h	/^#define NCPU /;"	d
 NDEV	kernel/param.h	/^#define NDEV /;"	d
 NDIRECT	kernel/fs.h	/^#define NDIRECT /;"	d
-NELEM	kernel/defs.h	/^#define NELEM(/;"	d
+NELEM	kernel/defs.h	/^#define     NELEM(/;"	d
 NFILE	kernel/param.h	/^#define NFILE /;"	d
 NINDIRECT	kernel/fs.h	/^#define NINDIRECT /;"	d
 NINODE	kernel/param.h	/^#define NINODE /;"	d
@@ -2705,6 +2705,7 @@ exit	user/wc.asm	/^exit:$/;"	l
 exit	user/zombie.asm	/^exit:$/;"	l
 exitiputtest	user/usertests.c	/^exitiputtest(char *s)$/;"	f	typeref:typename:void
 exitwait	user/usertests.c	/^exitwait(char *s)$/;"	f	typeref:typename:void
+extern	kernel/kernel.asm	/^extern char trampoline[]; \/\/ trampoline.S$/;"	l
 extern	kernel/kernel.asm	/^extern int devintr();$/;"	l
 f	user/usertests.c	/^    void (*f)(char *);$/;"	m	struct:main::test	typeref:typename:void (*)(char *)	file:
 f0	user/cat.asm	/^  f0:	f14080e7          	jalr	-236(ra) # 0 <cat>$/;"	l
@@ -3248,6 +3249,7 @@ freep	user/zombie.asm	/^  freep = p;$/;"	d
 freeproc	kernel/proc.c	/^freeproc(struct proc *p)$/;"	f	typeref:typename:void	file:
 freerange	kernel/kalloc.c	/^freerange(void *pa_start, void *pa_end)$/;"	f	typeref:typename:void
 freewalk	kernel/vm.c	/^freewalk(pagetable_t pagetable)$/;"	f	typeref:typename:void
+freewalk_nomatter	kernel/vm.c	/^freewalk_nomatter(pagetable_t pagetable)$/;"	f	typeref:typename:void
 fs.img	Makefile	/^fs.img: mkfs\/mkfs README $(UEXTRA) $(UPROGS)$/;"	t
 fsfd	mkfs/mkfs.c	/^int fsfd;$/;"	v	typeref:typename:int
 fsfull	user/usertests.c	/^fsfull()$/;"	f	typeref:typename:void
@@ -3409,6 +3411,7 @@ justone	user/usertests.asm	/^    justone = argv[1];$/;"	d
 kalloc	kernel/kalloc.c	/^kalloc(void)$/;"	f	typeref:typename:void *
 kernel_hartid	kernel/proc.h	/^  \/*  32 *\/ uint64 kernel_hartid; \/\/ saved kernel tp$/;"	m	struct:trapframe	typeref:typename:uint64
 kernel_pagetable	kernel/kernel.asm	/^  kernel_pagetable = (pagetable_t) kalloc();$/;"	d
+kernel_pagetable	kernel/proc.h	/^  pagetable_t kernel_pagetable;       \/\/ kernel page table$/;"	m	struct:proc	typeref:typename:pagetable_t
 kernel_pagetable	kernel/vm.c	/^pagetable_t kernel_pagetable;$/;"	v	typeref:typename:pagetable_t
 kernel_satp	kernel/proc.h	/^  \/*   0 *\/ uint64 kernel_satp;   \/\/ kernel page table$/;"	m	struct:trapframe	typeref:typename:uint64
 kernel_sp	kernel/proc.h	/^  \/*   8 *\/ uint64 kernel_sp;     \/\/ top of process's kernel stack$/;"	m	struct:trapframe	typeref:typename:uint64
@@ -3440,11 +3443,17 @@ kill	user/zombie.asm	/^kill:$/;"	l
 killed	kernel/proc.h	/^  int killed;                  \/\/ If non-zero, have been killed$/;"	m	struct:proc	typeref:typename:int
 kinit	kernel/kalloc.c	/^kinit()$/;"	f	typeref:typename:void
 kmem	kernel/kalloc.c	/^} kmem;$/;"	v	typeref:struct:__anon3c3fa87c0108
+kpgtbl	kernel/kernel.asm	/^  kpgtbl = kvminit_nopanic();$/;"	d
 kstack	kernel/proc.h	/^  uint64 kstack;               \/\/ Virtual address of kernel stack$/;"	m	struct:proc	typeref:typename:uint64
 kvminit	kernel/vm.c	/^kvminit()$/;"	f	typeref:typename:void
+kvminit_nopanic	kernel/vm.c	/^kvminit_nopanic()$/;"	f	typeref:typename:pagetable_t
+kvminit_user	kernel/vm.c	/^kvminit_user()$/;"	f	typeref:typename:pagetable_t
 kvminithart	kernel/vm.c	/^kvminithart()$/;"	f	typeref:typename:void
 kvmmap	kernel/vm.c	/^kvmmap(uint64 va, uint64 pa, uint64 sz, int perm)$/;"	f	typeref:typename:void
+kvmmap_nopanic	kernel/vm.c	/^kvmmap_nopanic(pagetable_t pagetable, uint64 va, uint64 pa, uint64 sz, int perm)$/;"	f	typeref:typename:int
+kvmmap_user	kernel/vm.c	/^kvmmap_user(pagetable_t pagetable, uint64 va, uint64 pa, uint64 sz, int perm)$/;"	f	typeref:typename:void
 kvmpa	kernel/vm.c	/^kvmpa(uint64 va)$/;"	f	typeref:typename:uint64
+kvmunmap_user	kernel/vm.c	/^kvmunmap_user(pagetable_t pagetable, uint64 va, uint64 sz)$/;"	f	typeref:typename:void
 l	user/wc.asm	/^  l = w = c = 0;$/;"	d
 last	kernel/kernel.asm	/^      last = s+1;$/;"	d
 last	kernel/kernel.asm	/^  last = PGROUNDDOWN(va + size - 1);$/;"	d
@@ -3612,10 +3621,8 @@ myproc	kernel/proc.c	/^myproc(void) {$/;"	f	typeref:struct:proc *
 n	gradelib.py	/^            n = 0$/;"	v	class:shell_script.setup_call_on_line.context
 n	kernel/kernel.asm	/^      n = PGSIZE;$/;"	d
 n	kernel/kernel.asm	/^      n = len;$/;"	d
-n	kernel/kernel.asm	/^      n = max;$/;"	d
 n	kernel/kernel.asm	/^      n = sz - i;$/;"	d
 n	kernel/kernel.asm	/^    n = PGSIZE - (dstva - va0);$/;"	d
-n	kernel/kernel.asm	/^    n = PGSIZE - (srcva - va0);$/;"	d
 n	kernel/kernel.asm	/^    n = ip->size - off;$/;"	d
 n	kernel/kernel.asm	/^  n = 0;$/;"	d
 n	kernel/kernel.asm	/^  n = snprintf(buf, sz, "copyin: %d\\n", stats.ncopyin);$/;"	d
@@ -3909,14 +3916,17 @@ printptr	user/printf.c	/^printptr(int fd, uint64 x) {$/;"	f	typeref:typename:voi
 proc	kernel/proc.c	/^struct proc proc[NPROC];$/;"	v	typeref:struct:proc[]
 proc	kernel/proc.h	/^  struct proc *proc;          \/\/ The process running on this cpu, or null.$/;"	m	struct:cpu	typeref:struct:proc *
 proc	kernel/proc.h	/^struct proc {$/;"	s
+proc_freekernelpagetable	kernel/proc.c	/^proc_freekernelpagetable(pagetable_t pagetable, uint64 sz)$/;"	f	typeref:typename:void
 proc_freepagetable	kernel/proc.c	/^proc_freepagetable(pagetable_t pagetable, uint64 sz)$/;"	f	typeref:typename:void
 proc_pagetable	kernel/proc.c	/^proc_pagetable(struct proc *p)$/;"	f	typeref:typename:pagetable_t
 procdump	kernel/proc.c	/^procdump(void)$/;"	f	typeref:typename:void
 procinit	kernel/proc.c	/^procinit(void)$/;"	f	typeref:typename:void
 procstate	kernel/proc.h	/^enum procstate { UNUSED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };$/;"	g
 proghdr	kernel/elf.h	/^struct proghdr {$/;"	s
-pte	kernel/kernel.asm	/^  pte = walk(kernel_pagetable, va, 0);$/;"	d
+pte	kernel/kernel.asm	/^  pte = walk(kpgtbl, va, 0);$/;"	d
+pte	kernel/kernel.asm	/^  pte = walk(myproc()->kernel_pagetable, va, 0);$/;"	d
 pte	kernel/kernel.asm	/^  pte = walk(pagetable, va, 0);$/;"	d
+pte	kernel/kernel.asm	/^  pte = walk(upgtbl, va, 0);$/;"	d
 pte_t	kernel/kernel.asm	/^pte_t *$/;"	l
 pte_t	kernel/riscv.h	/^typedef uint64 pte_t;$/;"	t	typeref:typename:uint64
 ptr	user/umalloc.c	/^    union header *ptr;$/;"	m	struct:header::__anon3d351ad10108	typeref:union:header *	file:
@@ -4205,7 +4215,6 @@ src	user/stressfs.asm	/^  src = vsrc;$/;"	d
 src	user/usertests.asm	/^  src = vsrc;$/;"	d
 src	user/wc.asm	/^  src = vsrc;$/;"	d
 src	user/zombie.asm	/^  src = vsrc;$/;"	d
-srcva	kernel/kernel.asm	/^    srcva = va0 + PGSIZE;$/;"	d
 stack0	kernel/start.c	/^__attribute__ ((aligned (16))) char stack0[4096 * NCPU];$/;"	v	typeref:typename:char[]
 stackbase	kernel/kernel.asm	/^  stackbase = sp - PGSIZE;$/;"	d
 stacktest	user/usertests.c	/^stacktest(char *s)$/;"	f	typeref:typename:void
@@ -4279,6 +4288,7 @@ static	kernel/kernel.asm	/^static int$/;"	l
 static	kernel/kernel.asm	/^static struct inode*$/;"	t
 static	kernel/kernel.asm	/^static uint$/;"	l
 static	kernel/kernel.asm	/^static uint64$/;"	l
+static	kernel/kernel.asm	/^static void vmprint_recusive(pagetable_t pgtbl, int depth) {$/;"	l
 static	kernel/kernel.asm	/^static void$/;"	l
 static	user/cat.asm	/^static Header *freep;$/;"	l
 static	user/cat.asm	/^static Header base;$/;"	l
@@ -4397,7 +4407,8 @@ sys_wait	kernel/sysproc.c	/^sys_wait(void)$/;"	f	typeref:typename:uint64
 sys_write	kernel/sysfile.c	/^sys_write(void)$/;"	f	typeref:typename:uint64
 syscall	kernel/syscall.c	/^syscall(void)$/;"	f	typeref:typename:void
 syscalls	kernel/syscall.c	/^static uint64 (*syscalls[])(void) = {$/;"	v	typeref:typename:uint64 (* [])(void)	file:
-sz	kernel/kernel.asm	/^    sz = uvmdealloc(p->pagetable, sz, sz + n);$/;"	d
+sz	kernel/kernel.asm	/^    sz = sz1;$/;"	d
+sz	kernel/kernel.asm	/^    sz = uvmdealloc_kernel(p->pagetable, p->kernel_pagetable, sz, sz + n);$/;"	d
 sz	kernel/kernel.asm	/^  sz = PGROUNDUP(sz);$/;"	d
 sz	kernel/kernel.asm	/^  sz = p->sz;$/;"	d
 sz	kernel/kernel.asm	/^  sz = sz1;$/;"	d
@@ -4543,15 +4554,20 @@ usertrapret	kernel/trap.c	/^usertrapret(void)$/;"	f	typeref:typename:void
 uservec	kernel/trampoline.S	/^uservec:    $/;"	l
 ushort	kernel/types.h	/^typedef unsigned short ushort;$/;"	t	typeref:typename:unsigned short
 uvmalloc	kernel/vm.c	/^uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)$/;"	f	typeref:typename:uint64
+uvmalloc_kernel	kernel/vm.c	/^uvmalloc_kernel(pagetable_t upgtbl, pagetable_t kpgtbl, uint64 oldsz, uint64 newsz)$/;"	f	typeref:typename:uint64
 uvmclear	kernel/vm.c	/^uvmclear(pagetable_t pagetable, uint64 va)$/;"	f	typeref:typename:void
+uvmclear_kernel	kernel/vm.c	/^uvmclear_kernel(pagetable_t upgtbl, pagetable_t kpgtbl, uint64 va)$/;"	f	typeref:typename:void
 uvmcopy	kernel/vm.c	/^uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)$/;"	f	typeref:typename:int
+uvmcopy_kernel	kernel/vm.c	/^uvmcopy_kernel(pagetable_t old, pagetable_t new, pagetable_t newk, uint64 sz)$/;"	f	typeref:typename:int
 uvmcreate	kernel/vm.c	/^uvmcreate()$/;"	f	typeref:typename:pagetable_t
 uvmdealloc	kernel/vm.c	/^uvmdealloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)$/;"	f	typeref:typename:uint64
+uvmdealloc_kernel	kernel/vm.c	/^uvmdealloc_kernel(pagetable_t upgtbl, pagetable_t kpgtbl, uint64 oldsz, uint64 newsz)$/;"	f	typeref:typename:uint64
 uvmfree	kernel/vm.c	/^uvmfree(pagetable_t pagetable, uint64 sz)$/;"	f	typeref:typename:void
+uvmfree_kernel	kernel/vm.c	/^uvmfree_kernel(pagetable_t pagetable, uint64 sz)$/;"	f	typeref:typename:void
 uvminit	kernel/vm.c	/^uvminit(pagetable_t pagetable, uchar *src, uint sz)$/;"	f	typeref:typename:void
+uvminit_kernel	kernel/vm.c	/^uvminit_kernel(pagetable_t upgtbl, pagetable_t kpgtbl$/;"	f	typeref:typename:void
 uvmunmap	kernel/vm.c	/^uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)$/;"	f	typeref:typename:void
 va0	kernel/kernel.asm	/^    va0 = PGROUNDDOWN(dstva);$/;"	d
-va0	kernel/kernel.asm	/^    va0 = PGROUNDDOWN(srcva);$/;"	d
 vaddr	kernel/elf.h	/^  uint64 vaddr;$/;"	m	struct:proghdr	typeref:typename:uint64
 valid	kernel/buf.h	/^  int valid;   \/\/ has data been read from disk?$/;"	m	struct:buf	typeref:typename:int
 valid	kernel/file.h	/^  int valid;          \/\/ inode has been read from disk?$/;"	m	struct:inode	typeref:typename:int
@@ -4563,9 +4579,11 @@ virtio_disk_init	kernel/virtio_disk.c	/^virtio_disk_init(void)$/;"	f	typeref:typ
 virtio_disk_intr	kernel/virtio_disk.c	/^virtio_disk_intr()$/;"	f	typeref:typename:void
 virtio_disk_rw	kernel/virtio_disk.c	/^virtio_disk_rw(struct buf *b, int write)$/;"	f	typeref:typename:void
 vmprint	kernel/vm.c	/^void vmprint(pagetable_t pgtbl) {$/;"	f	typeref:typename:void
-vmprint_recusive	kernel/vm.c	/^void vmprint_recusive(pagetable_t pgtbl, int depth) {$/;"	f	typeref:typename:void
+vmprint_recusive	kernel/vm.c	/^static void vmprint_recusive(pagetable_t pgtbl, int depth) {$/;"	f	typeref:typename:void	file:
 void	kernel/kernel.asm	/^void *$/;"	l
+void	kernel/kernel.asm	/^void freewalk_nomatter(pagetable_t pagetable);$/;"	l
 void	kernel/kernel.asm	/^void uartstart();$/;"	l
+void	kernel/kernel.asm	/^void vmprint(pagetable_t pgtbl) {$/;"	l
 void	kernel/kernel.asm	/^void$/;"	l
 void	user/cat.asm	/^void *$/;"	l
 void	user/cat.asm	/^void$/;"	l
@@ -4644,6 +4662,7 @@ wakeup	kernel/proc.c	/^wakeup(void *chan)$/;"	f	typeref:typename:void
 wakeup1	kernel/proc.c	/^wakeup1(struct proc *p)$/;"	f	typeref:typename:void	file:
 walk	kernel/vm.c	/^walk(pagetable_t pagetable, uint64 va, int alloc)$/;"	f	typeref:typename:pte_t *
 walkaddr	kernel/vm.c	/^walkaddr(pagetable_t pagetable, uint64 va)$/;"	f	typeref:typename:uint64
+walkaddr_kernel	kernel/vm.c	/^walkaddr_kernel(pagetable_t pagetable, uint64 va)$/;"	f	typeref:typename:uint64
 wc	user/wc.c	/^wc(int fd, char *name)$/;"	f	typeref:typename:void
 whitespace	user/sh.c	/^char whitespace[] = " \\t\\r\\n\\v";$/;"	v	typeref:typename:char[]
 winode	mkfs/mkfs.c	/^winode(uint inum, struct dinode *ip)$/;"	f	typeref:typename:void

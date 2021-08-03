@@ -38,7 +38,7 @@ exec(char *path, char **argv)
   if((pagetable = proc_pagetable(p)) == 0)
     goto bad;
 
-  kpgtbl = kvminit_user();
+  kpgtbl = kvminit_nopanic();
   if(kpgtbl == 0)
     goto bad;
 

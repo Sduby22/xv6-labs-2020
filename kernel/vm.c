@@ -17,6 +17,8 @@ extern char etext[];  // kernel.ld sets this to end of kernel code.
 
 extern char trampoline[]; // trampoline.S
 
+void freewalk_nomatter(pagetable_t pagetable);
+
 static void vmprint_recusive(pagetable_t pgtbl, int depth) {
   for (int i = 0; i != 512; i++) {
     /*if (i > 0 && depth == 0)*/
@@ -37,6 +39,55 @@ static void vmprint_recusive(pagetable_t pgtbl, int depth) {
 void vmprint(pagetable_t pgtbl) {
   printf("page table %p\n", pgtbl);
   vmprint_recusive(pgtbl, 0);
+}
+
+pagetable_t
+kvminit_nopanic()
+{
+  pagetable_t pgtbl = (pagetable_t) kalloc();
+  if (pgtbl == 0)
+    return 0;
+  memset(pgtbl, 0, PGSIZE);
+
+  int a;
+  // uart registers
+  a=kvmmap_nopanic(pgtbl, UART0, UART0, PGSIZE, PTE_R | PTE_W);
+  if (a != 0)
+    goto bad;
+  // virtio mmio disk interface
+  a=kvmmap_nopanic(pgtbl, VIRTIO0, VIRTIO0, PGSIZE, PTE_R | PTE_W);
+  if (a != 0)
+    goto bad;
+
+  // CLINT
+  /*kvmmap_user(pgtbl, CLINT, CLINT, 0x10000, PTE_R | PTE_W);*/
+
+  // PLIC
+  a=kvmmap_nopanic(pgtbl, PLIC, PLIC, 0x400000, PTE_R | PTE_W);
+  if (a != 0)
+    goto bad;
+
+  // map kernel text executable and read-only.
+  a=kvmmap_nopanic(pgtbl, KERNBASE, KERNBASE, (uint64)etext-KERNBASE, PTE_R | PTE_X);
+  if (a != 0)
+    goto bad;
+
+  // map kernel data and the physical RAM we'll make use of.
+  a=kvmmap_nopanic(pgtbl, (uint64)etext, (uint64)etext, PHYSTOP-(uint64)etext, PTE_R | PTE_W);
+  if (a != 0)
+    goto bad;
+
+  // map the trampoline for trap entry/exit to
+  // the highest virtual address in the kernel.
+  a=kvmmap_nopanic(pgtbl, TRAMPOLINE, (uint64)trampoline, PGSIZE, PTE_R | PTE_X);
+  if (a != 0)
+    goto bad;
+
+  return pgtbl;
+
+bad:
+  freewalk_nomatter(pgtbl);
+  return 0;
 }
 
 pagetable_t
@@ -204,6 +255,14 @@ kvmmap_user(pagetable_t pagetable, uint64 va, uint64 pa, uint64 sz, int perm)
     panic("kvmmap");
 }
 
+int
+kvmmap_nopanic(pagetable_t pagetable, uint64 va, uint64 pa, uint64 sz, int perm)
+{
+  if(mappages(pagetable, va, sz, pa, perm) != 0)
+    return -1;
+  return 0;
+}
+
 void
 kvmunmap_user(pagetable_t pagetable, uint64 va, uint64 sz)
 {
@@ -338,6 +397,9 @@ uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
   if(newsz < oldsz)
     return oldsz;
 
+  if(newsz >= PLIC)
+    return 0;
+
   oldsz = PGROUNDUP(oldsz);
   for(a = oldsz; a < newsz; a += PGSIZE){
     mem = kalloc();
@@ -420,11 +482,10 @@ uvmdealloc_kernel(pagetable_t upgtbl, pagetable_t kpgtbl, uint64 oldsz, uint64 n
   return newsz;
 }
 
-
-/*uint64 stack[3];*/
-
+// Recursively free page-table pages.
+// All leaf mappings must already have been removed.
 void
-freewalk_r(pagetable_t pagetable, int depth)
+freewalk(pagetable_t pagetable)
 {
   // there are 2^9 = 512 PTEs in a page table.
   for(int i = 0; i < 512; i++){
@@ -433,21 +494,32 @@ freewalk_r(pagetable_t pagetable, int depth)
     if((pte & PTE_V) && (pte & (PTE_R|PTE_W|PTE_X)) == 0){
       // this PTE points to a lower-level page table.
       uint64 child = PTE2PA(pte);
-      freewalk_r((pagetable_t)child, depth+1);
+      freewalk((pagetable_t)child);
       pagetable[i] = 0;
-    } else if(pte & PTE_V && i < 999){
+    } else if(pte & PTE_V){
       panic("freewalk: leaf");
     }
   }
   kfree((void*)pagetable);
 }
 
-// Recursively free page-table pages.
-// All leaf mappings must already have been removed.
 void
-freewalk(pagetable_t pagetable)
+freewalk_nomatter(pagetable_t pagetable)
 {
-  freewalk_r(pagetable, 0);
+  // there are 2^9 = 512 PTEs in a page table.
+  for(int i = 0; i < 512; i++){
+    pte_t pte = pagetable[i];
+    /*stack[depth] = i;*/
+    if((pte & PTE_V) && (pte & (PTE_R|PTE_W|PTE_X)) == 0){
+      // this PTE points to a lower-level page table.
+      uint64 child = PTE2PA(pte);
+      freewalk_nomatter((pagetable_t)child);
+      pagetable[i] = 0;
+    } else if(pte & PTE_V){
+      pagetable[i] = 0;
+    }
+  }
+  kfree((void*)pagetable);
 }
 
 // Free user memory pages,
