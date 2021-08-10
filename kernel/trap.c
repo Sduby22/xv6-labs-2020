@@ -70,12 +70,13 @@ usertrap(void)
   } else if(r_scause() == 13 || r_scause() == 15){
     // pagefault
     // alloc a new page
-    if (r_stval() > p->sz) {
+    if (r_stval() > p->sz || 
+        PGROUNDDOWN(r_stval()) == PGROUNDDOWN(p->trapframe->sp)-PGSIZE) {
       p->killed = 1;
       exit(-1);
     }
-    printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
-    printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+    /*printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);*/
+    /*printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());*/
     char *mem = kalloc();
     if (mem == 0) {
       p->killed = 1;
