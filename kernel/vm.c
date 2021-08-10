@@ -331,7 +331,8 @@ uint64 walkmap(pagetable_t pagetable, uint64 va0) {
   uint64 pa = walkaddr(pagetable, va0);
   if (pa == 0) {
     // page fault, alloc and map.
-    if (va0 >= p->sz) {
+    if (va0 >= p->sz || 
+        PGROUNDDOWN(va0) == PGROUNDDOWN(p->trapframe->sp)-PGSIZE) {
       return 0;
     }
     char *mem = kalloc();
