@@ -331,7 +331,7 @@ uint64 walkmap(pagetable_t pagetable, uint64 va0) {
   uint64 pa = walkaddr(pagetable, va0);
   if (pa == 0) {
     // page fault, alloc and map.
-    if (va0 > p->sz) {
+    if (va0 >= p->sz) {
       return 0;
     }
     char *mem = kalloc();
@@ -380,7 +380,8 @@ int copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len) {
 
   while (len > 0) {
     va0 = PGROUNDDOWN(srcva);
-    pa0 = walkaddr(pagetable, va0);
+    /*pa0 = walkaddr(pagetable, va0);*/
+    pa0 = walkmap(pagetable, va0);
     if (pa0 == 0)
       return -1;
     n = PGSIZE - (srcva - va0);
@@ -405,7 +406,8 @@ int copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max) {
 
   while (got_null == 0 && max > 0) {
     va0 = PGROUNDDOWN(srcva);
-    pa0 = walkaddr(pagetable, va0);
+    /*pa0 = walkaddr(pagetable, va0);*/
+    pa0 = walkmap(pagetable, va0);
     if (pa0 == 0)
       return -1;
     n = PGSIZE - (srcva - va0);

@@ -70,7 +70,7 @@ usertrap(void)
   } else if(r_scause() == 13 || r_scause() == 15){
     // pagefault
     // alloc a new page
-    if (r_stval() > p->sz || 
+    if (r_stval() >= p->sz || 
         PGROUNDDOWN(r_stval()) == PGROUNDDOWN(p->trapframe->sp)-PGSIZE) {
       p->killed = 1;
       exit(-1);
