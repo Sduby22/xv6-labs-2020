@@ -67,6 +67,38 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
+  } else if (r_scause() == 15) {
+    // Store page fault
+    // Check if it's a COW page.
+    uint64 stval = r_stval();
+    pte_t* pte;
+    if ((pte = walk(p->pagetable, stval, 0)) == 0 
+          || (*pte & PTE_COW) == 0) {
+      // unmapped or not a COW page.
+      printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
+      printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+      p->killed = 1;
+      exit(-1);
+    }
+    // copy that page, make it rw, unmap the old and map the new.
+    char *mem = kalloc();
+    if (mem == 0) {
+      printf("COW: memory used out.\n");
+      p->killed = 1;
+      exit(-1);
+    }
+    uint64 pa = PTE2PA((uint64)*pte);
+    uint64 va = PGROUNDDOWN(stval);
+    int flags = PTE_FLAGS((uint64)*pte) | PTE_W;
+    flags &= ~PTE_COW;
+    memmove(mem, (void*)pa, PGSIZE);
+    uvmunmap(p->pagetable, va, 1, 1);
+    if(mappages(p->pagetable, va, PGSIZE, (uint64)mem, flags)
+                  != 0) {
+      kfree(mem);
+      printf("failed to map new page.\n");
+      p->killed = 1;
+    }
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
