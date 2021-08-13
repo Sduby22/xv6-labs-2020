@@ -71,9 +71,9 @@ We should modify refcounts when we map/unmap pages, which involves:
 
 That was a stupid mistake: forget to dereference pte pointer when extracting pa using PTE2PA
 
-### refcount always > 1
+### refcount always > 1 so memory won't get freed
 
-we add/dec the refcount in mappages(), but in kvminit, the kernel maps the whole physical memory, so all entries in the refcount array was set 1. Multiple ways to fix this:
+we add/dec the refcount in mappages(), but in kvminit(), the kernel maps the whole physical memory, so all entries in the refcount array was set 1. Multiple ways to fix this:
 
 - Use a different mappages() version in kvmmap(), which doesn't affect refcount.
 - When kalloc(), set refcount = 1, Only add refcount when uvmcopying(), dec refcount when unmapping it.
