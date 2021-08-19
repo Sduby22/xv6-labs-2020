@@ -26,12 +26,9 @@ struct {
 void
 kinit()
 {
-  push_off();
-  int id = cpuid();
-  initlock(&kmem[id].lock, "kmem");
-  if (id == 0)
-    freerange(end, (void*)PHYSTOP);
-  pop_off();
+  for (int i = 0; i != NCPU; ++i)
+    initlock(&kmem[i].lock, "kmem");
+  freerange(end, (void*)PHYSTOP);
 }
 
 void
@@ -75,9 +72,8 @@ kfree(void *pa)
 void *
 steal(void)
 {
-  struct run *r;
+  struct run *r = 0;
 
-  int id = cpuid();
   int i;
 
   for (i = 0; !r && i != NCPU; ++i) {
@@ -89,7 +85,7 @@ steal(void)
     }
   }
 
-  for (; i >= 0; --i) {
+  for (--i ; i >= 0; --i) {
     release(&kmem[i].lock);
   }
   return (void*)r;
