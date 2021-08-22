@@ -83,11 +83,12 @@ steal(void)
     if (r) {
       kmem[i].freelist = r->next;
     }
-  }
-
-  for (--i ; i >= 0; --i) {
     release(&kmem[i].lock);
   }
+
+  /*for (--i ; i >= 0; --i) {*/
+    /*release(&kmem[i].lock);*/
+  /*}*/
   return (void*)r;
 }
 
