@@ -85,34 +85,75 @@ bget(uint dev, uint blockno)
 
   // Not cached.
   // Recycle the least recently used (LRU) unused buffer.
+  release(&bcache.bucket[bnum].lock);
   acquire(&bcache.lock);
-  uint64 min = (uint64)1 << 62;
-  for(b = bcache.buf; b != bcache.buf+NBUF; b++){
-    if(b->refcnt == 0 && b->timestamp < min) {
-      // b is less recently used free buffer.
-      evict = b;
-      min = b->timestamp;
+  acquire(&bcache.bucket[bnum].lock);
+
+  // Is the block already cached?
+  for(b = bcache.bucket[bnum].head.next; b != 0; b = b->next){
+    if(b->dev == dev && b->blockno == blockno){
+      b->refcnt++;
+      release(&bcache.bucket[bnum].lock);
+      release(&bcache.lock);
+      /*release(&bcache.lock);*/
+      acquiresleep(&b->lock);
+      return b;
     }
   }
-  if (!evict) {
-    panic("bget: no buffers");
+    
+  while(1)
+  {
+    uint64 min = (uint64)1 << 62;
+    for(b = bcache.buf; b != bcache.buf+NBUF; b++){
+      if(b->refcnt == 0 && b->timestamp < min) {
+        // b is less recently used free buffer.
+        evict = b;
+        min = b->timestamp;
+      }
+    }
+
+    if (!evict) {
+      panic("bget: no buffers");
+    }
+
+    uint bnum2 = evict->blockno % NBUCKET;
+
+    if (bnum2 != bnum) {
+      acquire(&bcache.bucket[bnum2].lock);
+    }
+
+    if (evict->refcnt != 0) {
+      if (bnum2 != bnum) {
+        release(&bcache.bucket[bnum2].lock);
+      }
+      continue;
+    }
+
+    evict->dev = dev;
+    evict->blockno = blockno;
+    evict->valid = 0;
+    evict->refcnt = 1;
+
+    if (evict->next)
+      evict->next->prev = evict->prev;
+    if (evict->prev)
+      evict->prev->next = evict->next;
+
+    if (bnum2 != bnum) {
+      release(&bcache.bucket[bnum2].lock);
+    }
+
+    evict->next = bcache.bucket[bnum].head.next;
+    evict->prev = &bcache.bucket[bnum].head;
+    bcache.bucket[bnum].head.next = evict;
+
+    release(&bcache.bucket[bnum].lock);
+    release(&bcache.lock);
+    /*release(&bcache.lock);*/
+    acquiresleep(&evict->lock);
+
+    return evict;
   }
-  evict->dev = dev;
-  evict->blockno = blockno;
-  evict->valid = 0;
-  evict->refcnt = 1;
-  if (evict->next)
-    evict->next->prev = evict->prev;
-  if (evict->prev)
-    evict->prev->next = evict->next;
-  evict->next = bcache.bucket[bnum].head.next;
-  evict->prev = &bcache.bucket[bnum].head;
-  bcache.bucket[bnum].head.next = evict;
-  release(&bcache.lock);
-  release(&bcache.bucket[bnum].lock);
-  /*release(&bcache.lock);*/
-  acquiresleep(&evict->lock);
-  return evict;
 }
 
 // Return a locked buf with the contents of the indicated block.
@@ -149,6 +190,8 @@ brelse(struct buf *b)
   releasesleep(&b->lock);
 
   /*acquire(&bcache.lock);*/
+  int bnum = b->blockno % NBUCKET;
+  acquire(&bcache.bucket[bnum].lock);
   b->refcnt--;
   if (b->refcnt == 0) {
     // no one is waiting for it.
@@ -160,22 +203,25 @@ brelse(struct buf *b)
     /*bcache.head.next = b;*/
     b->timestamp = ticks;
   }
+  release(&bcache.bucket[bnum].lock);
   
   /*release(&bcache.lock);*/
 }
 
 void
 bpin(struct buf *b) {
-  acquire(&bcache.lock);
+  int bnum = b->blockno % NBUCKET;
+  acquire(&bcache.bucket[bnum].lock);
   b->refcnt++;
-  release(&bcache.lock);
+  release(&bcache.bucket[bnum].lock);
 }
 
 void
 bunpin(struct buf *b) {
-  acquire(&bcache.lock);
+  int bnum = b->blockno % NBUCKET;
+  acquire(&bcache.bucket[bnum].lock);
   b->refcnt--;
-  release(&bcache.lock);
+  release(&bcache.bucket[bnum].lock);
 }
 
 
