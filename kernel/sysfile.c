@@ -16,6 +16,8 @@
 #include "file.h"
 #include "fcntl.h"
 
+#define MAXFOLLOW 10
+
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
 static int
@@ -239,6 +241,48 @@ bad:
 }
 
 static struct inode*
+create_link(char *target, char *path)
+{
+  struct inode *ip, *dp;
+  char name[DIRSIZ];
+
+  if((dp = nameiparent(path, name)) == 0)
+    return 0;
+
+  ilock(dp);
+
+  if((ip = dirlookup(dp, name, 0)) != 0) {
+    iput(ip);
+    iunlockput(dp);
+    return 0;
+  }
+
+  short type = T_SYMLINK;
+  if((ip = ialloc(dp->dev, type)) == 0)
+    panic("create: ialloc");
+
+  ilock(ip);
+  ip->major = 0;
+  ip->minor = 0;
+  ip->nlink = 1;
+  iupdate(ip);
+  if(writei(ip, 0, (uint64)target, 0, MAXPATH) == -1) {
+    iunlockput(ip);
+    iunlockput(dp);
+    return 0;
+  }
+  // iupdate() called in writei()
+  /*iupdate(ip);*/
+
+  if(dirlink(dp, name, ip->inum) < 0)
+    panic("create: dirlink");
+
+  iunlockput(dp);
+
+  return ip;
+}
+
+static struct inode*
 create(char *path, short type, short major, short minor)
 {
   struct inode *ip, *dp;
@@ -311,6 +355,38 @@ sys_open(void)
     ilock(ip);
     if(ip->type == T_DIR && omode != O_RDONLY){
       iunlockput(ip);
+      end_op();
+      return -1;
+    }
+  }
+
+  if(ip->type == T_SYMLINK && !(omode & O_NOFOLLOW)) {
+    struct inode *last = ip;
+    int i;
+    for (i = 0; i != MAXFOLLOW; ++i) {
+      char targetpath[MAXPATH];
+      if (!(readi(last, 0, (uint64)targetpath, 0, MAXPATH) > 0)) {
+        iunlockput(last);
+        end_op();
+        return -1;
+      }
+      struct inode *targeti;
+      if ((targeti = namei(targetpath)) == 0) {
+        iunlockput(last);
+        end_op();
+        return -1;
+      }
+      ilock(targeti);
+      if (targeti->type != T_SYMLINK) {
+        ip = targeti;
+        iunlockput(last);
+        break;
+      }
+      iunlockput(last);
+      last = targeti;
+    }
+    if (i == MAXFOLLOW) {
+      iunlockput(last);
       end_op();
       return -1;
     }
@@ -482,5 +558,21 @@ sys_pipe(void)
     fileclose(wf);
     return -1;
   }
+  return 0;
+}
+
+uint64 sys_symlink(void) {
+  char target[MAXPATH], path[MAXPATH];
+  if(argstr(0, target, MAXPATH) < 0 || argstr(1, path, MAXPATH) < 0)
+    return -1;
+  
+  struct inode *ip;
+  begin_op();
+  if ((ip = create_link(target, path)) == 0) {
+    end_op();
+    return -1;
+  }
+  iunlockput(ip);
+  end_op();
   return 0;
 }
