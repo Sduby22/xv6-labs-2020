@@ -512,6 +512,9 @@ uint64 sys_mmap(void) {
     panic("no vma entry");
   }
 
+  if (p->vmastart < VMASTART)
+    panic(" < VMASTART");
+
   if (p->vmastart + length >= VMASTOP) {
     panic("MAX_VMA exceeded");
   }

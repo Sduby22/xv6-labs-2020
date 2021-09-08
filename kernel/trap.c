@@ -74,8 +74,14 @@ usertrap(void)
       printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
       p->killed = 1;
     } else {
-      printf("MMAP\n");
-      p->killed = 1;
+      char* mem = kalloc();
+      if (mem == 0) {
+        printf("mmap pagefault mem used out\n");
+        p->killed = 1;
+        exit(-1);
+      }
+      int flags = PTE_FLAGS(*pte) | PTE_W | PTE_R;
+      *pte = PA2PTE(mem) | flags;
     }
   }
 
