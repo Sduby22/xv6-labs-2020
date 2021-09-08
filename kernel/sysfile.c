@@ -15,6 +15,7 @@
 #include "sleeplock.h"
 #include "file.h"
 #include "fcntl.h"
+#include "memlayout.h"
 
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
@@ -483,4 +484,56 @@ sys_pipe(void)
     return -1;
   }
   return 0;
+}
+
+int mmap_lazymap(struct proc* p, uint64 length) {
+  return mappages(p->pagetable, p->vmastart, length, 0, PTE_U | PTE_MMAP);
+}
+
+uint64 sys_mmap(void) {
+  uint64 addr, length, offset;
+  int prot, flags, fd;
+  if(argaddr(0, &addr) < 0 || argaddr(1, &length) < 0 || argaddr(5, &offset) < 0) {
+    return 0xffffffffffffffff;
+  }
+  if(argint(2, &prot) < 0||argint(3, &flags) < 0||argint(4, &fd) < 0) {
+    return 0xffffffffffffffff;
+  }
+
+  struct proc *p = myproc();
+  int i;
+  for(i = 0; i != MAX_VMA; i++) {
+    if (p->vma[i].valid == 0) {
+      break;
+    }
+  }
+
+  if (i == MAX_VMA) {
+    panic("no vma entry");
+  }
+
+  if (p->vmastart + length >= VMASTOP) {
+    panic("MAX_VMA exceeded");
+  }
+
+  if (mmap_lazymap(p, length) == -1) {
+    panic("lazymap failed");
+  }
+
+  p->vma[i].addr = p->vmastart;
+  p->vma[i].length = length;
+  p->vma[i].valid = 1;
+  p->vma[i].prot = prot;
+  p->vma[i].fd = p->ofile[fd];
+  p->vma[i].flag = flags;
+
+  filedup(p->vma[i].fd);
+
+  p->vmastart += length;
+
+  return p->vma[i].addr;
+}
+
+uint64 sys_munmap(void) {
+  return -1;
 }
