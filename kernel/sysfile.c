@@ -528,6 +528,14 @@ uint64 sys_mmap(void) {
     panic("MAX_VMA exceeded");
   }
 
+  if (p->ofile[fd]->type != FD_INODE) {
+    return 0xffffffffffffffff;
+  }
+
+  if (p->ofile[fd]->writable == 0 && prot & PROT_WRITE && flags & MAP_SHARED) {
+    return 0xffffffffffffffff;
+  }
+
   if (mmap_lazymap(p, length) == -1) {
     panic("lazymap failed");
   }
@@ -538,6 +546,7 @@ uint64 sys_mmap(void) {
   p->vma[i].prot = prot;
   p->vma[i].fd = p->ofile[fd];
   p->vma[i].flag = flags;
+  p->vma[i].offset = offset;
 
   filedup(p->vma[i].fd);
 
@@ -547,5 +556,47 @@ uint64 sys_mmap(void) {
 }
 
 uint64 sys_munmap(void) {
-  return -1;
+  uint64 addr, length;
+  if(argaddr(0, &addr) < 0 || argaddr(1, &length) < 0) {
+    return -1;
+  }
+
+  struct proc *p= myproc();
+  int i;
+  for (i = 0; i != MAX_VMA; i++) {
+    if (p->vma[i].valid == 0)
+      continue;
+    if (p->vma[i].addr <= addr
+        && p->vma[i].addr + p->vma[i].length >= addr + length) 
+      break;
+  }
+
+  if (i == MAX_VMA)
+    return -1;
+
+  if (addr > p->vma[i].addr && addr+length < p->vma[i].addr + p->vma[i].length) {
+    // punch a hole
+    return -1;
+  }
+
+  if (addr == p->vma[i].addr) {
+    // unmap pages on the left
+    uint pages = (PGROUNDDOWN(p->vma[i].addr + length) - PGROUNDDOWN(addr)) / PGSIZE;
+    uvmunmap_vma(p->pagetable, &p->vma[i], PGROUNDDOWN(addr), pages);
+    p->vma[i].addr += length;
+    p->vma[i].offset += length;
+    p->vma[i].length -= length;
+  } else {
+    //unmap pages on the right
+    uint pages = (PGROUNDUP(p->vma[i].addr+length) - PGROUNDUP(addr)) / PGSIZE;
+    uvmunmap_vma(p->pagetable, &p->vma[i], PGROUNDUP(addr), pages);
+    p->vma[i].length -= length;
+  }
+
+  if (p->vma[i].length == 0) {
+    fileclose(p->vma[i].fd);
+    p->vma[i].valid = 0;
+  }
+
+  return 0;
 }

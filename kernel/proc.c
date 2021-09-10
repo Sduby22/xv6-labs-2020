@@ -207,8 +207,7 @@ proc_freepagetable(pagetable_t pagetable, uint64 sz, struct vma_struct *vma)
         continue;
       }
       
-      uint64 pages = PGROUNDUP(vma[i].length) / PGSIZE;
-      uvmunmap(pagetable, vma[i].addr, pages, 1);
+      uvmunmap_vma(pagetable, &vma[i], 0, 0);
       vma[i].valid = 0;
     }
   }
@@ -288,13 +287,15 @@ fork(void)
   }
 
   // Copy user memory from parent to child.
-  if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0){
+  if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0
+      || uvmcopy_vma(np->pagetable, p->vma) < 0){
     freeproc(np);
     release(&np->lock);
     return -1;
   }
   np->sz = p->sz;
 
+  memmove(np->vma, p->vma, sizeof(struct vma_struct)*MAX_VMA);
   np->parent = p;
 
   // copy saved user registers.

@@ -90,6 +90,7 @@ struct vma_struct {
   int valid;
   int flag;
   int prot;
+  uint offset;
   struct file* fd;
 };
 

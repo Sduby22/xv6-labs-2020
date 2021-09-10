@@ -5,6 +5,10 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "fcntl.h"
+#include "fs.h"
+#include "sleeplock.h"
+#include "file.h"
 
 struct spinlock tickslock;
 uint ticks;
@@ -74,13 +78,42 @@ usertrap(void)
       printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
       p->killed = 1;
     } else {
+      // mmap
       char* mem = kalloc();
+      memset(mem, 0, PGSIZE);
       if (mem == 0) {
         printf("mmap pagefault mem used out\n");
         p->killed = 1;
         exit(-1);
       }
-      int flags = PTE_FLAGS(*pte) | PTE_W | PTE_R;
+
+      //find the vma
+      int i;
+      for (i = 0; i!=MAX_VMA; i++) {
+        if (p->vma[i].valid && p->vma[i].addr <= r_stval() 
+                            && p->vma[i].addr+p->vma[i].length > r_stval()) {
+          break;
+        }
+      }
+
+      if (i == MAX_VMA) {
+        panic("no such VMA");
+      }
+
+      struct vma_struct* vma = &p->vma[i];
+      struct inode *ino = vma->fd->ip;
+      uint off = vma->offset + PGROUNDDOWN(r_stval()) - vma->addr;
+      /*printf("read: stval%p off%d", r_stval(), off);*/
+      ilock(ino);
+      if (readi(ino, 0, (uint64)mem, off, PGSIZE) == -1) {
+        iunlock(ino);
+        p->killed = 1;
+        exit(-1);
+      }
+      iunlock(ino);
+      int flags = (PTE_FLAGS(*pte) & ~PTE_MMAP) 
+                  | (vma->prot & PROT_READ ? PTE_R : 0) 
+                  | (vma->prot & PROT_WRITE ? PTE_W : 0);
       *pte = PA2PTE(mem) | flags;
     }
   }

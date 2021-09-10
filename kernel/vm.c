@@ -5,6 +5,11 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
+#include "spinlock.h"
+#include "proc.h"
+#include "sleeplock.h"
+#include "file.h"
+#include "fcntl.h"
 
 /*
  * the kernel's page table.
@@ -185,6 +190,64 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
   }
 }
 
+void
+uvmunmap_vma(pagetable_t pagetable, struct vma_struct* vma, uint64 va, uint64 npages)
+{
+  if (va == 0) {
+    va = PGROUNDDOWN(vma->addr);
+    npages = PGROUNDUP(vma->length) / PGSIZE;
+  } else {
+    if (va < vma->addr || va >= vma->addr + vma->length || va %PGSIZE != 0) {
+      panic("uvmunmap_vma");
+    }
+  }
+  if (vma->flag & MAP_SHARED) {
+    for (int tva = va; tva < va+npages*PGSIZE; tva+=PGSIZE) {
+      pte_t *pte = walk(pagetable, tva, 0);
+      if (*pte == 0 || !(*pte & PTE_V)) {
+        panic("uvmunmap_vma pte invalid");
+      }
+      if ((*pte & PTE_MMAP) != 0 || (*pte & PTE_D) == 0) {
+        continue;
+      }
+
+      // write a few blocks at a time to avoid exceeding
+      // the maximum log transaction size, including
+      // i-node, indirect block, allocation blocks,
+      // and 2 blocks of slop for non-aligned writes.
+      // this really belongs lower down, since writei()
+      // might be writing a device like the console.
+      int max = ((MAXOPBLOCKS-1-1-2) / 2) * BSIZE;
+      int i = 0, r, ret;
+      int n = PGSIZE;
+      int off = tva - vma->addr + vma->offset;
+      while(i < n){
+        int n1 = n - i;
+        if(n1 > max)
+          n1 = max;
+
+        begin_op();
+        ilock(vma->fd->ip);
+        if ((r = writei(vma->fd->ip, 1, tva + i, off, n1)) > 0)
+          off += r;
+        iunlock(vma->fd->ip);
+        end_op();
+
+        if(r != n1){
+          // error from writei
+          break;
+        }
+        i += r;
+      }
+      ret = (i == n ? n : -1);
+      if (ret == -1) {
+        panic("write back");
+      }
+    }
+  }
+  uvmunmap(pagetable, va, npages, 1);
+}
+
 // create an empty user page table.
 // returns 0 if out of memory.
 pagetable_t
@@ -323,6 +386,30 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 
  err:
   uvmunmap(new, 0, i / PGSIZE, 1);
+  return -1;
+}
+
+int uvmcopy_vma(pagetable_t new, struct vma_struct *oldvma) {
+  int i,j;
+  for (i = 0; i != MAX_VMA; i++) {
+    if (!oldvma[i].valid)
+      continue;
+    for (j = 0; j < oldvma[i].length; j+=PGSIZE) {
+      if (mappages(new, oldvma[i].addr+j, PGSIZE, 0, PTE_MMAP | PTE_U) == -1) {
+        goto bad;
+      }
+    }
+  }
+
+  return 0;
+
+bad:
+  for(int k = 0; k < j; k+=PGSIZE) {
+    uvmunmap(new, oldvma[i].addr+k, 1, 0);
+  }
+  for(int k = 0; k != i; k++) {
+    uvmunmap(new, oldvma[k].addr, oldvma[k].length/PGSIZE, 0);
+  }
   return -1;
 }
 
