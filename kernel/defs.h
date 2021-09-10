@@ -8,6 +8,7 @@ struct spinlock;
 struct sleeplock;
 struct stat;
 struct superblock;
+struct vma_struct;
 
 // bio.c
 void            binit(void);
@@ -88,7 +89,7 @@ int             fork(void);
 int             growproc(int);
 void            proc_mapstacks(pagetable_t);
 pagetable_t     proc_pagetable(struct proc *);
-void            proc_freepagetable(pagetable_t, uint64);
+void            proc_freepagetable(pagetable_t, uint64, struct vma_struct*);
 int             kill(int);
 struct cpu*     mycpu(void);
 struct cpu*     getmycpu(void);

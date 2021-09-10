@@ -487,7 +487,16 @@ sys_pipe(void)
 }
 
 int mmap_lazymap(struct proc* p, uint64 length) {
-  return mappages(p->pagetable, p->vmastart, length, 0, PTE_U | PTE_MMAP);
+  int i, failed = 0;
+  for(i = 0; !failed && i != length; i += PGSIZE) {
+    failed = mappages(p->pagetable, p->vmastart+i, PGSIZE, 0, PTE_U | PTE_MMAP);
+  }
+  if (failed == -1) {
+    for(i -= PGSIZE; i >= 0; i -= PGSIZE) {
+      uvmunmap(p->pagetable,p->vmastart+i,1,0);
+    }
+  }
+  return failed;
 }
 
 uint64 sys_mmap(void) {

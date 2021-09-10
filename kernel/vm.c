@@ -177,7 +177,9 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
       panic("uvmunmap: not a leaf");
     if(do_free){
       uint64 pa = PTE2PA(*pte);
-      kfree((void*)pa);
+      if (pa != 0) {
+        kfree((void*)pa);
+      }
     }
     *pte = 0;
   }
